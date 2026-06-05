@@ -1,0 +1,30 @@
+--- /home/test/blockly/robot_python_experiment/robot_api.py
++++ /home/test/blockly/robot_python_experiment/robot_api.py
+@@ -194,6 +194,26 @@
+     return _sys.locate_color(color)
+ 
+ 
++def set_joint_angle_offset(j1, j2, j3, j4):
++    """底层API: 设置关节角度偏移"""
++    cmd = f"JointAngleOffset_{j1},{j2},{j3},{j4}"
++    _sys.send_cmd(cmd)
++    time.sleep(0.8)
++
++
++def get_grab_z():
++    """获取抓取高度 Z 轴常量"""
++    return Z_GRAB
++
++
++def get_lift_z():
++    """获取抬起安全高度 Z 轴常量"""
++    return Z_LIFT
++
++
++def get_place_z():
++    """获取放置高度 Z 轴常量"""
++    return Z_PLACE
++
++
+ def detect_all():
+     """

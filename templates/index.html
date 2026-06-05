@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Local Robot AI Studio</title>
+    <script src="/static/blockly/blockly_compressed.js"></script>
+    <script src="/static/blockly/blocks_compressed.js"></script>
+    <script src="/static/blockly/python_compressed.js"></script>
+    <script src="/static/blockly/msg/js/en.js"></script>
+    <style>
+        html, body { height: 100%; margin: 0; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: #fff; overflow: hidden; }
+        #header { background: #2d2d2d; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #444; height: 50px; }
+        #header h3 { margin: 0; color: #4CAF50; }
+        .btn { padding: 8px 15px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; margin-left: 10px; }
+        .btn-run { background: #238636; color: white; }
+        .btn-run:hover { background: #2ea043; }
+        .btn-code { background: #0e639c; color: white; }
+        .btn-code:hover { background: #1177bb; }
+        #main { display: flex; height: calc(100vh - 70px); }
+        #blocklyDiv { flex: 3; height: 100%; border-right: 2px solid #333; }
+        #side-panel { flex: 1.5; display: flex; flex-direction: column; background: #252526; padding: 10px; }
+        .feed-box { flex: 1.2; background: #000; border-radius: 8px; margin-bottom: 10px; overflow: hidden; border: 1px solid #444; }
+        #video-feed { width: 100%; height: 100%; object-fit: contain; }
+        .vlm-box { flex: 0.8; background: #2d2d2d; border-radius: 8px; padding: 10px; margin-bottom: 10px; border: 1px solid #ffeb3b; }
+        #vlm-text { color: #ffeb3b; font-family: monospace; font-size: 13px; height: 80%; overflow-y: auto; white-space: pre-wrap; line-height: 1.6; }
+        .log-box { flex: 1; background: #1e1e1e; border-radius: 8px; padding: 10px; border: 1px solid #444; font-family: monospace; font-size: 12px; overflow-y: auto; color: #4CAF50; }
+        .title { font-size: 12px; color: #888; margin-bottom: 5px; text-transform: uppercase; }
+        /* 安全警告 & 代码弹窗 */
+        #safety-overlay, #code-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
+        #safety-overlay.show, #code-overlay.show { display: flex; }
+        #safety-box, #code-box { background: #2d2d2d; border-radius: 12px; padding: 30px 40px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+        #safety-box { border: 2px solid #f44336; max-width: 480px; text-align: center; box-shadow: 0 8px 32px rgba(244,67,54,0.3); }
+        #code-box { border: 2px solid #0e639c; max-width: 800px; width: 80%; }
+        #safety-box h2 { color: #f44336; margin: 0 0 12px 0; font-size: 20px; }
+        #code-box h2 { color: #0e639c; margin: 0 0 12px 0; font-size: 20px; }
+        #safety-box p { color: #ccc; margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; }
+        #code-box pre { background: #1e1e1e; color: #ccc; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 13px; border: 1px solid #444; max-height: 400px; }
+        #safety-box button, #code-box button { color: white; border: none; padding: 10px 30px; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: bold; }
+        #safety-box button { background: #f44336; }
+        #safety-box button:hover { background: #d32f2f; }
+        #code-box button { background: #0e639c; }
+        #code-box button:hover { background: #1177bb; }
+    </style>
+</head>
+<body>
+    <!-- 安全警告弹窗 -->
+    <div id="safety-overlay" onclick="closeSafetyAlert()">
+        <div id="safety-box" onclick="event.stopPropagation()">
+            <h2>Safety Warning</h2>
+            <p id="safety-msg">Target is outside camera view.</p>
+            <button onclick="closeSafetyAlert()">OK</button>
+        </div>
+    </div>
+    <!-- Python 代码弹窗 -->
+    <div id="code-overlay" onclick="closeCodeModal()">
+        <div id="code-box" onclick="event.stopPropagation()">
+            <h2>Generated Python Code</h2>
+            <pre id="code-content"></pre>
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="closeCodeModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="header">
+        <h3>Local AI Robot</h3>
+        <div>
+            <button class="btn btn-code" onclick="showCode()">Show Python</button>
+            <button class="btn btn-run" id="run-btn" onclick="runTask()">Run Pipeline</button>
+        </div>
+    </div>
+    <div id="main">
+        <div id="blocklyDiv"></div>
+        <div id="side-panel">
+            <div class="title">Visual Feed</div>
+            <div class="feed-box"><img id="video-feed" src="/video_feed"></div>
+            <div class="title">Scene Graph</div>
+            <div class="vlm-box"><div id="vlm-text">Waiting for scene analysis...</div></div>
+            <div class="title">Execution Log</div>
+            <div class="log-box" id="terminal">System Ready.</div>
+        </div>
+    </div>
+
+    <!-- 工具箱配置 -->
+    <xml id="toolbox" style="display: none">
+        <category name="1. Perception" colour="230">
+            <block type="vlm_analyze"></block>
+            <block type="yolo_locate"></block>
+            <block type="yolo_detect_all"></block>
+            <block type="snapshot_save"></block>
+        </category>
+        <category name="2. Actions" colour="290">
+            <block type="robot_pick"></block>
+            <block type="robot_place"></block>
+            <block type="robot_pick_place"></block>
+        </category>
+        <category name="3. Motion" colour="20">
+            <block type="robot_move"></block>
+            <block type="robot_home"></block>
+            <block type="robot_suction"></block>
+            <block type="robot_set_speed"></block>
+            <block type="coord_xy"></block>
+        </category>
+        <category name="4. Variables" colour="330" custom="VARIABLE"></category>
+        <category name="5. Logic & Loop" colour="210">
+            <block type="controls_if"></block>
+            <block type="controls_repeat_ext">
+                <value name="TIMES"><block type="math_number"><field name="NUM">3</field></block></value>
+            </block>
+            <block type="controls_whileUntil"></block>
+            <block type="logic_compare"></block>
+            <block type="logic_operation"></block>
+            <block type="logic_boolean"></block>
+            <block type="math_number"></block>
+            <block type="text"></block>
+            <block type="text_print"></block>
+            <block type="robot_wait"></block>
+        </category>
+    </xml>
+
+    <script>
+        // 1. 定义积木
+        Blockly.Blocks['vlm_analyze'] = { init: function() { this.appendDummyInput().appendField("Analyze Scene"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(230); }};
+        Blockly.Blocks['yolo_locate'] = { init: function() {
+            this.appendDummyInput().appendField("Locate").appendField(new Blockly.FieldDropdown([["Red","red"],["Yellow","yellow"],["Green","green"],["Blue","blue"]]), "COLOR").appendField("Cube");
+            this.setOutput(true, "Array"); this.setColour(230);
+        }};
+        Blockly.Blocks['robot_pick'] = { init: function() { this.appendValueInput("POS").setCheck("Array").appendField("Pick at"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(290); }};
+        Blockly.Blocks['robot_place'] = { init: function() {
+            this.appendValueInput("POS").setCheck("Array").appendField("Place at");
+            this.appendDummyInput().appendField("Height Z:").appendField(new Blockly.FieldNumber(105), "Z");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(290); this.setInputsInline(true);
+        }};
+        Blockly.Blocks['robot_move'] = { init: function() {
+            this.appendValueInput("POS").setCheck("Array").appendField("Move to");
+            this.appendDummyInput().appendField("Z:").appendField(new Blockly.FieldNumber(160), "Z");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(20); this.setInputsInline(true);
+        }};
+        Blockly.Blocks['robot_home'] = { init: function() { this.appendDummyInput().appendField("Return Home"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(20); }};
+        Blockly.Blocks['robot_suction'] = { init: function() {
+            this.appendDummyInput().appendField("Suction").appendField(new Blockly.FieldDropdown([["ON","True"],["OFF","False"]]), "ST");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(20);
+        }};
+        Blockly.Blocks['robot_wait'] = { init: function() { this.appendDummyInput().appendField("Wait").appendField(new Blockly.FieldNumber(1), "SEC").appendField("sec"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(210); }};
+
+        // -- New Perception Blocks --
+        Blockly.Blocks['yolo_detect_all'] = { init: function() {
+            this.appendDummyInput().appendField("Detect All Objects");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(230);
+        }};
+        Blockly.Blocks['snapshot_save'] = { init: function() {
+            this.appendDummyInput().appendField("Snapshot Save");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(230);
+        }};
+
+        // -- New Action Blocks --
+        Blockly.Blocks['robot_pick_place'] = { init: function() {
+            this.appendValueInput("FROM").setCheck("Array").appendField("Pick&Place from");
+            this.appendValueInput("TO").setCheck("Array").appendField("to");
+            this.appendDummyInput().appendField("Place Z:").appendField(new Blockly.FieldNumber(105), "Z");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(290); this.setInputsInline(true);
+        }};
+
+        // -- Coordinate Input Block --
+        Blockly.Blocks['coord_xy'] = { init: function() {
+            this.appendDummyInput().appendField("Coord X:").appendField(new Blockly.FieldNumber(200), "X").appendField("Y:").appendField(new Blockly.FieldNumber(0), "Y");
+            this.setOutput(true, "Array"); this.setColour(20);
+            this.setTooltip("Manual world coordinate [X, Y]");
+        }};
+
+        // -- New Motion Blocks --
+        Blockly.Blocks['robot_set_speed'] = { init: function() {
+            this.appendDummyInput().appendField("Set Speed").appendField(new Blockly.FieldDropdown([["Slow (20)","20"],["Normal (50)","50"],["Fast (80)","80"]]), "SPD");
+            this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(20);
+        }};
+
+        // 2. 生成 Python
+        const py = Blockly.Python;
+        py.forBlock['vlm_analyze'] = () => 'api_vision("scene")\n';
+        py.forBlock['yolo_locate'] = (block) => ['api_vision("' + block.getFieldValue('COLOR') + '")', py.ORDER_ATOMIC];
+        py.forBlock['robot_pick'] = (block, gen) => {
+            const p = gen.valueToCode(block, 'POS', py.ORDER_ATOMIC) || '[0,0]';
+            return `_pick_pos = ${p}\napi_move(_pick_pos, 180)\napi_suction(True)\ntime.sleep(1)\napi_move(_pick_pos, 223)\n`;
+        };
+        py.forBlock['robot_place'] = (block, gen) => {
+            const p = gen.valueToCode(block, 'POS', py.ORDER_ATOMIC) || '[0,0]';
+            const z = block.getFieldValue('Z');
+            return `_place_pos = ${p}\napi_move(_place_pos, 223)\napi_move(_place_pos, ${z})\napi_suction(False)\ntime.sleep(1)\napi_move(_place_pos, 223)\n`;
+        };
+        py.forBlock['robot_move'] = (block, gen) => {
+            const p = gen.valueToCode(block, 'POS', py.ORDER_ATOMIC) || '[0,0]';
+            return `api_move(${p}, ${block.getFieldValue('Z')})\n`;
+        };
+        py.forBlock['robot_home'] = () => 'api_home()\n';
+        py.forBlock['robot_suction'] = (block) => `api_suction(${block.getFieldValue('ST')})\n`;
+        py.forBlock['robot_wait'] = (block) => `time.sleep(${block.getFieldValue('SEC')})\n`;
+
+        // -- New block generators --
+        py.forBlock['yolo_detect_all'] = () => 'api_vision("scene")\n';
+        py.forBlock['snapshot_save'] = () => 'api_snapshot()\n';
+        py.forBlock['robot_pick_place'] = (block, gen) => {
+            const from = gen.valueToCode(block, 'FROM', py.ORDER_ATOMIC) || '[0,0]';
+            const to = gen.valueToCode(block, 'TO', py.ORDER_ATOMIC) || '[0,0]';
+            const z = block.getFieldValue('Z');
+            return `_pick_pos = ${from}\napi_move(_pick_pos, 180)\napi_suction(True)\ntime.sleep(1)\napi_move(_pick_pos, 223)\n_place_pos = ${to}\napi_move(_place_pos, 223)\napi_move(_place_pos, ${z})\napi_suction(False)\ntime.sleep(1)\napi_move(_place_pos, 223)\n`;
+        };
+        py.forBlock['robot_set_speed'] = (block) => `_speed = ${block.getFieldValue('SPD')}\n`;
+        py.forBlock['coord_xy'] = (block) => ['[' + block.getFieldValue('X') + ', ' + block.getFieldValue('Y') + ']', py.ORDER_ATOMIC];
+
+        // 3. 初始化 Workspace
+        const ws = Blockly.inject('blocklyDiv', { toolbox: document.getElementById('toolbox'), theme: Blockly.Themes.Dark, grid: {spacing: 20, length: 3, colour: '#333', snap: true} });
+        const term = document.getElementById('terminal');
+        const vlmBox = document.getElementById('vlm-text');
+
+        // 4. 加载默认示例：安全范围演示 (眼在手外)
+        var defaultXml = `
+        <xml xmlns="https://developers.google.com/blockly/xml">
+          <block type="robot_home" x="30" y="30">
+            <next>
+              <block type="robot_move">
+                <field name="Z">160</field>
+                <value name="POS">
+                  <block type="coord_xy">
+                    <field name="X">200</field>
+                    <field name="Y">20</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="robot_move">
+                    <field name="Z">160</field>
+                    <value name="POS">
+                      <block type="coord_xy">
+                        <field name="X">300</field>
+                        <field name="Y">50</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </xml>`;
+        Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(defaultXml), ws);
+
+        function runTask() {
+            const code = py.workspaceToCode(ws);
+            if(!code) return;
+            document.getElementById('run-btn').disabled = true;
+            term.innerHTML += `<br>>>> Starting Local Task...`;
+
+            // 先跑场景图，完成后做安全预检，再执行积木代码
+            vlmBox.innerText = 'Analyzing scene...';
+            fetch('/analyze_scene').then(res => res.json()).then(sceneData => {
+                vlmBox.innerText = sceneData.scene_graph || 'No objects detected.';
+                term.innerHTML += `<br>[Scene Graph] Done.`;
+                // 安全预检：在执行前检查所有坐标
+                return fetch('/safety_check', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code: code}) });
+            }).then(res => res.json()).then(checkData => {
+                if (!checkData.safe) {
+                    showSafetyAlert(checkData.violations.join('\n'));
+                    term.innerHTML += `<br>[Safety] Blocked: coordinates outside camera view.`;
+                    term.scrollTop = term.scrollHeight;
+                    return Promise.reject('safety_blocked');
+                }
+                // 预检通过，执行代码
+                return fetch('/execute_code', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code: code}) });
+            }).then(res => res.json()).then(data => {
+                if (data.status === 'error' && data.message.includes('Safety')) {
+                    showSafetyAlert(data.message);
+                }
+                term.innerHTML += `<br>${data.message.replace(/\n/g, '<br>')}`;
+                term.scrollTop = term.scrollHeight;
+            }).catch(err => {
+                if (err !== 'safety_blocked') term.innerHTML += `<br>[Error] ${err}`;
+            }).finally(() => { document.getElementById('run-btn').disabled = false; });
+        }
+
+        function showCode() {
+            const code = py.workspaceToCode(ws);
+            document.getElementById('code-content').innerText = code;
+            document.getElementById('code-overlay').classList.add('show');
+        }
+        function closeCodeModal() {
+            document.getElementById('code-overlay').classList.remove('show');
+        }
+        window.addEventListener('resize', () => Blockly.svgResize(ws), false);
+
+        function showSafetyAlert(msg) {
+            document.getElementById('safety-msg').innerText = msg;
+            document.getElementById('safety-overlay').classList.add('show');
+        }
+        function closeSafetyAlert() {
+            document.getElementById('safety-overlay').classList.remove('show');
+        }
+
+        // Colorize toolbox category labels to match block colours
+        (function() {
+            const catColours = {230: 'hsl(230,55%,65%)', 290: 'hsl(290,55%,65%)', 20: 'hsl(20,70%,60%)', 330: 'hsl(330,55%,65%)', 210: 'hsl(210,55%,65%)'};
+            document.querySelectorAll('.blocklyTreeRow').forEach(row => {
+                const icon = row.querySelector('.blocklyTreeIcon');
+                const label = row.querySelector('.blocklyTreeLabel');
+                if (icon && label) {
+                    const bg = icon.style.borderLeftColor || icon.style.backgroundColor;
+                    if (bg) { label.style.color = bg; label.style.fontWeight = 'bold'; }
+                }
+            });
+            // Fallback: match by category order
+            const labels = document.querySelectorAll('.blocklyTreeLabel');
+            const colours = [catColours[230], catColours[290], catColours[20], catColours[330], catColours[210]];
+            labels.forEach((lbl, i) => { if (colours[i] && !lbl.style.color) { lbl.style.color = colours[i]; lbl.style.fontWeight = 'bold'; } });
+        })();
+    </script>
+</body>
+</html>
