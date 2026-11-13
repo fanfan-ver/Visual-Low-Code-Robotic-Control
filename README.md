@@ -19,6 +19,5 @@ Due to size limits, pre-trained weights are hosted in the **[Releases](../../rel
 2. **VLM (Florence-2)**: Please refer to the paper for downloading instructions.
 
 ## 🚀 Quick Start
-1. Clone the repo: `git clone https://github.com/fanfan-ver/Visual-Low-Code-Robotic-Control.git`
 2. Install dependencies: `pip install -r requirements.txt`
 3. Run the application: `python app.py`
