@@ -1,9 +1,6 @@
 # Visual-Low-Code-Robotic-Control
 Official repository for the paper: **"A Visual Low-Code Robotic Control Framework with Hybrid Semantic-Geometric Perception for Non-Expert Operators"**.
 
-## 📄 Documentation
-- **[Read the Paper (PDF)](./paper.pdf)**  
-- **[System Highlights & Abstract](https://github.com/fanfan-ver/Visual-Low-Code-Robotic-Control#introduction)**
 
 ## 🛠️ Key Features
 - **Visual Low-Code Interface**: Built on Blockly for intuitive task orchestration.
